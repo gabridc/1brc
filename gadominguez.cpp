@@ -9,80 +9,71 @@
 
 using namespace std;
 
-void read(const string& file, std::vector<string>& lines)
+void read(const string& file, std::vector<string>& lines, uint32_t first, uint32_t chunks)
 {
     std::string line;
 
     ifstream f{file};
+    uint32_t lineNumber = 1;
     if(!f)
         std::cout << "could not open file" << std::endl;
-    while (std::getline(f, line))
+    
+    while (std::getline(f, line) && lineNumber <= first * chunks + chunks)
     {
-        if(!line.empty())
+        if(!line.empty() && lineNumber >= first)
             lines.push_back(line);
     }
 
 }
 
-void mapper(const std::vector<string>& lines, std::vector<std::pair<string, double>>& map, uint32_t first, uint32_t last)
+void mapper(string file, std::vector<std::pair<string, double>>& map, uint32_t first, uint32_t chunks)
 {
-    for(uint32_t i = first; i <= last; i++)
+    std::vector<string> lines;
+    std::string line;
+
+    ifstream f{file};
+    uint32_t lineNumber = first * chunks;
+    if(!f)
+        std::cout << "could not open file" << std::endl;
+    
+    while (std::getline(f, line) && lineNumber <= first * chunks + chunks - 1)
     {
-       size_t pos = lines[i].find(';');
-        map.push_back({lines[i].substr(0, pos), stod(lines[i].substr(pos+1))});
+        if(!line.empty() && lineNumber >= first)
+        {
+            size_t pos = line.find(';');
+            map.push_back({line.substr(0, pos), stod(line.substr(pos+1))});
+        }
+        lineNumber++;
+
     }
 }
 
 int main(int argc, char **argv) {
     const unsigned int cpus = std::thread::hardware_concurrency();
     string file = "measurements.txt";
-    vector<string> lines;
     std::vector<std::pair<string, double>> maps[cpus];
     std::vector<thread> threads;
 
     if (argc > 1)
         file = argv[1];
 
-    read(file, lines);
    // std::cout << file << " " << cpus << " " << lines.size() << std::endl;
 
-    auto chunks = lines.size() / cpus;
+    auto chunks = 100000;
     for(auto jobIndex = 0; jobIndex < cpus; jobIndex++)
     {
-        if(jobIndex == 0)
-        {
-            //std::cout << jobIndex * chunks << " " << chunks << std::endl;
-            threads.push_back(thread(mapper, ref(lines), ref(maps[jobIndex]), 0, chunks));
-        }
-        else if(jobIndex != cpus - 1)
-        {
-            //std::cout << jobIndex * chunks + jobIndex << " " <<  (jobIndex * chunks + jobIndex) + chunks << std::endl;
-            threads.push_back(thread(mapper, ref(lines), ref(maps[jobIndex]), jobIndex * chunks + jobIndex, (jobIndex * chunks + jobIndex) + chunks ));
-        }
-        else
-        {
-            //std::cout << jobIndex * chunks + jobIndex << " " <<  lines.size() - 1 << std::endl;
-            threads.push_back(thread(mapper, ref(lines), ref(maps[jobIndex]), jobIndex * chunks + jobIndex , lines.size() - 1));
-        }
-
+        //std::cout << jobIndex * chunks << " " << chunks << std::endl;
+        threads.push_back(thread(mapper, file, ref(maps[jobIndex]), jobIndex, chunks));
     }
         
     for(auto& t : threads)
         t.join();
 
-    int res = 0;
-    for(int i = 0; i < cpus; i++)
-    {
+    int res = 1;
+    for(auto map : maps)
+        for(auto line : map)
+            std::cout << line.first << " " << line.second << " " << res ++ << std::endl;
 
-        for(auto s : maps[i])
-        {
-            res++;
-            //std::cout << i << " " << s.first << " " << s.second  << " " << res <<  std::endl;
-        }
-
-    }
-    std::cout << "Total entries: " << res << std::endl;
-
-
+    std::cout << "Total entries: " << res - 1 << std::endl;
     return 0;
 }
