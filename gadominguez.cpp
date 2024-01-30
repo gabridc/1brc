@@ -38,6 +38,7 @@ int main(int argc, char **argv) {
     string file = "measurements.txt";
     vector<string> lines;
     std::vector<std::pair<string, double>> maps[cpus];
+    std::vector<thread> threads;
 
     if (argc > 1)
         file = argv[1];
@@ -51,31 +52,36 @@ int main(int argc, char **argv) {
         if(jobIndex == 0)
         {
             //std::cout << jobIndex * chunks << " " << chunks << std::endl;
-            mapper(lines, maps[jobIndex], 0, chunks);
+            threads.push_back(thread(mapper, ref(lines), ref(maps[jobIndex]), 0, chunks));
         }
         else if(jobIndex != cpus - 1)
         {
             //std::cout << jobIndex * chunks + jobIndex << " " <<  (jobIndex * chunks + jobIndex) + chunks << std::endl;
-            mapper(lines, maps[jobIndex], jobIndex * chunks + jobIndex, (jobIndex * chunks + jobIndex) + chunks );
+            threads.push_back(thread(mapper, ref(lines), ref(maps[jobIndex]), jobIndex * chunks + jobIndex, (jobIndex * chunks + jobIndex) + chunks ));
         }
         else
         {
             //std::cout << jobIndex * chunks + jobIndex << " " <<  lines.size() - 1 << std::endl;
-            mapper(lines, maps[jobIndex], jobIndex * chunks + jobIndex , lines.size() - 1);
+            threads.push_back(thread(mapper, ref(lines), ref(maps[jobIndex]), jobIndex * chunks + jobIndex , lines.size() - 1));
         }
 
     }
         
-    /*int res = 0;
+    for(auto& t : threads)
+        t.join();
+
+    int res = 0;
     for(int i = 0; i < cpus; i++)
     {
 
         for(auto s : maps[i])
         {
-            std::cout << i << " " << s.first << " " << s.second  << " " << res++ <<  std::endl;
+            res++;
+            //std::cout << i << " " << s.first << " " << s.second  << " " << res <<  std::endl;
         }
 
-    }*/
+    }
+    std::cout << "Total entries: " << res << std::endl;
 
 
     return 0;
