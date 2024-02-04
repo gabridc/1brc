@@ -67,7 +67,7 @@ void mapper(string file, std::vector<std::pair<string, double>>& map, uint32_t s
     {
         getline(f, line);
         size_t pos = line.find(';');
-        map.push_back({line.substr(0, pos), stod(line.substr(pos+1))});
+        map.emplace_back(line.substr(0, pos), stod(line.substr(pos+1)));
     }
 
 
@@ -98,6 +98,20 @@ int main(int argc, char **argv) {
     f.seekg( 0, std::ios::end );
     size = f.tellg() - size;
 
+    char* buffer = new char[size];
+    if (!buffer) {
+        std::cerr << "Memory allocation failed\n";
+        return 1;
+    }
+
+    f.seekg(0);
+    // Read the content of the file into memory
+    if (!f.read(buffer, size)) {
+        std::cerr << "Failed to read file\n";
+        delete[] buffer;
+        return 1;
+    }
+
     std::cout << file << " " << cpus << " " << size << " bytes" << std::endl;
     auto chunkSize = size / cpus;
 
@@ -111,7 +125,7 @@ int main(int argc, char **argv) {
         int end = (core == cpus - 1) ? end = size : (core + 1) * chunkSize - 1;
             
 
-        std::cout << "thread " << core << " Start: " << start << " End: " << end << std::endl;
+        std::cout << "thread " << (int)core << " Start: " << start << " End: " << end << std::endl;
        threads.emplace_back(mapper, file, ref(maps[core]), start, end, core);
     }
 
