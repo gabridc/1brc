@@ -9,76 +9,81 @@
 
 using namespace std;
 
-uint32_t findFirstCharLine(std::ifstream& f, uint32_t pos)
+uint32_t findFirstCharLine(const char* buffer, uint32_t pos)
 {
     char character = '\0';
     uint8_t index = 0U;
     uint32_t p = pos;
     
-    f.seekg(p);
-    if((char)f.peek() == '\n')
+    if((char) buffer[p] == '\n')
         p--;
-    f.seekg(p);
-    while(f.peek() != '\n')
-    {
-        f.seekg(p-index);
-        index++;
-    }
 
-    return (uint32_t) f.tellg() + 1;
+    while(buffer[p] != '\n')
+        p--;
+    return p + 1;
 }
 
-uint32_t findLastCharLine(std::ifstream& f, uint32_t pos)
+uint32_t findLastCharLine(const char* buffer, uint32_t pos)
 {
     char character = '\0';
     uint8_t index = 0U;
     uint32_t p = pos;
     
-    f.seekg(p);
-    if((char)f.peek() == '\n')
+    if((char) buffer[p] == '\n')
         p--;
-    f.seekg(p);
-    while(f.peek() != '\n')
-    {
-        f.seekg(p-index);
-        index++;
-    }
 
-    return (uint32_t) f.tellg();
+    while(buffer[p] != '\n')
+        p--;
+
+    return p;
 }
 
-void mapper(string file, std::vector<std::pair<string, double>>& map, uint32_t start, uint32_t end, int core)
+void readLine(const char* buffer, string& line, uint32_t& initPos, uint32_t& size)
+{
+    line.clear();
+    do
+    {
+        if((char) buffer[initPos] != '\n')
+            line += buffer[initPos];
+        initPos++;
+    } while ( (char) buffer[initPos] != '\n' && initPos < size);
+
+}
+
+void mapper(const char* buffer, std::vector<std::pair<string, double>>& map, uint32_t start, uint32_t end, int core, uint32_t size)
 {
     string line;
-    ifstream f{file, std::ios::in};
-    if(!f)
-        std::cout << "could not open file" << std::endl;
 
     uint8_t index = 0;  
     uint32_t initPos = 0;
 
     if(start !=0)
-        initPos = findFirstCharLine(f, start);
+        initPos = findFirstCharLine(buffer, start);
     
-    uint32_t lastPos = findLastCharLine(f, end);
+    uint32_t lastPos = findLastCharLine(buffer, end);
 
-    f.seekg(initPos);
-    while(f.tellg() <= lastPos)
+    while(initPos <= lastPos)
     {
-        getline(f, line);
-        size_t pos = line.find(';');
-        map.emplace_back(line.substr(0, pos), stod(line.substr(pos+1)));
+        readLine(buffer, line, initPos, size);
+        if(line.size() > 1)
+        {
+            size_t pos = line.find(';');
+            try
+            {
+                map.emplace_back(line.substr(0, pos), stod(line.substr(pos+1)));
+            }
+            catch(const std::exception& e)
+            {
+                std::cerr << e.what() << " " <<line << '\n';
+            }
+        }
+
+        
     }
 
 
-    /*f.seekg(initPos);
-    getline(f, line);
-    std::cout << "Thread ID: " << core << " ";
-    std::cout << "Pos Init: "<< initPos <<  " Last Pos: " << lastPos << std::endl;
-    std::cout << line << std::endl;
-    f.seekg(lastPos - 8);
-    getline(f, line);
-    std::cout << line << std::endl;*/
+    //std::cout << "Thread ID: " << core << " ";
+    //std::cout << "Pos Init: "<< initPos <<  " Last Pos: " << lastPos << std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -117,22 +122,22 @@ int main(int argc, char **argv) {
 
     std::cout << file << " " << cpus << " " << size << " bytes "  << chunkSize << " bytes"<< std::endl;
 
-    //mapper(file, ref(maps[0]), 0, size, 0);
+    //mapper(buffer, ref(maps[0]), 0, size, 0, size);
 
-   for(uint8_t core = 0; core < cpus; core++)
+    for(uint8_t core = 0; core < cpus; core++)
     {
         int start = core * chunkSize;
         int end = (core == cpus - 1) ? end = size : (core + 1) * chunkSize - 1;
             
 
         std::cout << "thread " << (int)core << " Start: " << start << " End: " << end << std::endl;
-       threads.emplace_back(mapper, file, ref(maps[core]), start, end, core);
+       threads.emplace_back(mapper, buffer, ref(maps[core]), start, end, core, size);
     }
 
     for(auto& t : threads)
         t.join();
-/*
-    std::ofstream out{"out.txt", std::ios::out};
+
+    /*std::ofstream out{"out.txt", std::ios::out};
     int res = 1;
     for(auto map : maps)
         for(auto line : map)
@@ -141,9 +146,9 @@ int main(int argc, char **argv) {
             res++;
         }
 
-    std::cout << "Total entries: " << res - 1 << std::endl;
+    std::cout << "Total entries: " << res - 1 << std::endl;*/
 
-
+/*
     auto chunks = 100000;
     for(auto jobIndex = 0; jobIndex < cpus; jobIndex++)
     {
