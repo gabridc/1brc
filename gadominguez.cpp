@@ -100,7 +100,7 @@ void mapper(const char* buffer, std::vector<std::pair<string, double>>& map, uns
     }
     auto end2 = std::chrono::system_clock::now();
     std::chrono::duration<float,std::milli> duration = end2 - start2;
-    std::cout << "Mapper duration: " << duration.count() / 1000 << std::endl;
+    //std::cout << "Mapper duration: " << duration.count() / 1000 << std::endl;
 
     //std::cout << "Thread ID: " << core << " ";
     //std::cout << "Pos Init: "<< initPos <<  " Last Pos: " << lastPos << std::endl;
@@ -178,12 +178,16 @@ int main(int argc, char **argv) {
         }
         auto end = std::chrono::system_clock::now();
         std::chrono::duration<float,std::milli> duration = end - start;
-        std::cout << duration.count() / 1000 << " s" << std::endl;
+        //std::cout << duration.count() / 1000 << " s" << std::endl;
 
         for(auto& t : threads)
             t.join();
         threads.clear();
     }
+
+    auto mapperEnd = std::chrono::system_clock::now();
+    std::chrono::duration<float,std::milli> mapperDuration = mapperEnd - start;
+    std::cout << "Mapper Duration: "<< mapperDuration.count() / 1000 << " s" << std::endl;
 
     /*std::ofstream out{"out.txt", std::ios::out};
     int res = 1;
@@ -207,13 +211,13 @@ int main(int argc, char **argv) {
     for(auto& t : threads)
         t.join();*/
 
-    int res = 1;
+    int totalEntries = 0;
     for(auto map : maps)
         for(auto line : map)
-            res++;
+            totalEntries++;
             //std::cout << line.first << " " << line.second << " " << res ++ << std::endl;
 
-    std::cout << "Total entries: " << res - 1 << std::endl;
+    //std::cout << "Total entries: " << totalEntries << std::endl;
 
 
     // suffle
@@ -238,34 +242,40 @@ int main(int argc, char **argv) {
         }
     
     auto endShuffle = std::chrono::system_clock::now();
-    std::chrono::duration<float,std::milli> durShuffle = endShuffle - startShuffle;
-    std::cout << "Shuffle duration: " << durShuffle.count() / 1000 << " s" << std::endl;
+    std::chrono::duration<float,std::milli> shuffleDuration = endShuffle - startShuffle;
+    std::cout << "Shuffle duration: " << shuffleDuration.count() / 1000 << " s" << std::endl;
 
     //Reduce
     auto reduceStart = std::chrono::system_clock::now();
     std::map<string, std::tuple<double, double, double>> output;
 
-    size = keys.size() / cpus;
-    for(uint8_t core = 0; core < cpus; core++)
-    {
-        unsigned long start = core * size;
-        unsigned long end = (core == cpus - 1) ? end =  keys.size()  : (core + 1) *  size - 1;
-        threads.emplace_back(reduce2, ref(keys), ref(shufflemap), ref(output), start, end);
-    }
 
-    for(auto& t : threads)
-        t.join();
+    if(!multiThread)
+        reduce2(ref(keys), ref(shufflemap), ref(output), 0, keys.size());
+    else
+    {
+        size = keys.size() / cpus;
+        for(uint8_t core = 0; core < cpus; core++)
+        {
+            unsigned long start = core * size;
+            unsigned long end = (core == cpus - 1) ? end =  keys.size()  : (core + 1) *  size - 1;
+            threads.emplace_back(reduce2, ref(keys), ref(shufflemap), ref(output), start, end);
+        }
+
+        for(auto& t : threads)
+            t.join();
+    }
     
     auto reduceEnd = std::chrono::system_clock::now();
-    std::chrono::duration<float,std::milli> reducedur = reduceEnd - reduceStart;
-    std::cout << "Reduce duration: " << reducedur.count() / 1000 << " s" << std::endl;
+    std::chrono::duration<float,std::milli> reduceDuration = reduceEnd - reduceStart;
+    std::cout << "Reduce duration: " << reduceDuration.count() / 1000 << " s" << std::endl;
 
     auto end1 = std::chrono::system_clock::now();
-    std::chrono::duration<float,std::milli> duration1 = end1 - startTotal;
+    std::chrono::duration<float,std::milli> totalDuration = end1 - startTotal;
 
-    std::cout << "Total duration: " << duration1.count() / 1000 << " s" << std::endl;
+    std::cout << "Total duration: " << totalDuration.count() / 1000 << " s" << std::endl;
 
-    ofstream fout{"out.txt", std::ios::out}; 
+    ofstream fout{"out-" + to_string(multiThread) + ".txt", std::ios::out}; 
     for(auto [city, values] : shufflemap)
     {
         string str = city + " : " + to_string(values.size()) + " [ " ;
@@ -288,7 +298,18 @@ int main(int argc, char **argv) {
     }
     fout.close();
 
-    ofstream foutSum{"out-summary.txt", std::ios::out}; 
+    ofstream foutSum{"out-summary-" + to_string(multiThread) + ".txt", std::ios::out};
+    
+    foutSum << "------------------------------" << std::endl;
+    foutSum << "Number of cores: " << cpus << std::endl 
+    << "Multithread: "  <<  multiThread <<  std::endl 
+    << "Total Entries: "  <<  totalEntries <<  std::endl 
+    << "Mapper duration: "  <<  mapperDuration.count() / 1000  << " s"  <<  std::endl 
+    << "Shuffle duration: " << shuffleDuration.count() / 1000  << " s" <<  std::endl
+    << "Reduce duration: " << shuffleDuration.count() / 1000  << " s" <<  std::endl
+    << "Total duration: "  <<  totalDuration.count() / 1000  << " s" << std::endl;
+    foutSum << "------------------------------" << std::endl;
+
     for(auto [city, values] : output)
     {
         foutSum <<  city + " : [ "  + to_string(std::get<0>(values)) + "," + to_string(std::get<1>(values)) + "," + to_string(std::get<2>(values)) + "]" << std::endl;
