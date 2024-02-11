@@ -113,9 +113,6 @@ void reduce2(std::vector<string>& keys, std::map<string, std::vector<double>>& m
         auto size = map[keys[index]].size();
         std::sort(map[keys[index]].begin(), map[keys[index]].end());
 
-        if(keys[index] == "Abha")
-            std::cout << size << " " << map[keys[index]][size - 1]<< std::endl;
-
         double suma = std::accumulate(map[keys[index]].begin(), map[keys[index]].end(), 0.0);
         double average = suma / size;
 
@@ -243,6 +240,31 @@ int main(int argc, char **argv) {
     auto endShuffle = std::chrono::system_clock::now();
     std::chrono::duration<float,std::milli> durShuffle = endShuffle - startShuffle;
     std::cout << "Shuffle duration: " << durShuffle.count() / 1000 << " s" << std::endl;
+
+    //Reduce
+    auto reduceStart = std::chrono::system_clock::now();
+    std::map<string, std::tuple<double, double, double>> output;
+
+    size = keys.size() / cpus;
+    for(uint8_t core = 0; core < cpus; core++)
+    {
+        unsigned long start = core * size;
+        unsigned long end = (core == cpus - 1) ? end =  keys.size()  : (core + 1) *  size - 1;
+        threads.emplace_back(reduce2, ref(keys), ref(shufflemap), ref(output), start, end);
+    }
+
+    for(auto& t : threads)
+        t.join();
+    
+    auto reduceEnd = std::chrono::system_clock::now();
+    std::chrono::duration<float,std::milli> reducedur = reduceEnd - reduceStart;
+    std::cout << "Reduce duration: " << reducedur.count() / 1000 << " s" << std::endl;
+
+    auto end1 = std::chrono::system_clock::now();
+    std::chrono::duration<float,std::milli> duration1 = end1 - startTotal;
+
+    std::cout << "Total duration: " << duration1.count() / 1000 << " s" << std::endl;
+
     ofstream fout{"out.txt", std::ios::out}; 
     for(auto [city, values] : shufflemap)
     {
@@ -266,37 +288,12 @@ int main(int argc, char **argv) {
     }
     fout.close();
 
-    //Reduce
-    auto reduceStart = std::chrono::system_clock::now();
-    std::map<string, std::tuple<double, double, double>> output;
-
-    size = keys.size() / cpus;
-    for(uint8_t core = 0; core < cpus; core++)
-    {
-        unsigned long start = core * size;
-        unsigned long end = (core == cpus - 1) ? end =  keys.size()  : (core + 1) *  size - 1;
-        threads.emplace_back(reduce2, ref(keys), ref(shufflemap), ref(output), start, end);
-    }
-
-    for(auto& t : threads)
-        t.join();
-    
-    auto reduceEnd = std::chrono::system_clock::now();
-    std::chrono::duration<float,std::milli> reducedur = reduceEnd - reduceStart;
-    std::cout << "Reduce duration: " << reducedur.count() / 1000 << " s" << std::endl;
-
     ofstream foutSum{"out-summary.txt", std::ios::out}; 
     for(auto [city, values] : output)
     {
         foutSum <<  city + " : [ "  + to_string(std::get<0>(values)) + "," + to_string(std::get<1>(values)) + "," + to_string(std::get<2>(values)) + "]" << std::endl;
     }
     foutSum.close();
-
-
-    auto end1 = std::chrono::system_clock::now();
-    std::chrono::duration<float,std::milli> duration1 = end1 - startTotal;
-
-    std::cout << "Total duration: " << duration1.count() / 1000 << " s" << std::endl;
 
     return 0;
 }
