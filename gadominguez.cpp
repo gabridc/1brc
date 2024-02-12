@@ -14,6 +14,86 @@
 
 using namespace std;
 
+void writeOutput(std::map<string, std::vector<double>>& shufflemap, std::map<string, std::tuple<double, double, double>>& output, 
+                bool multiThread, const unsigned int cpus, const int totalEntries,
+                std::chrono::duration<float,std::milli> mapperDuration,
+                std::chrono::duration<float,std::milli> shuffleDuration,
+                std::chrono::duration<float,std::milli> totalDuration)
+{
+    ofstream fout{"out-" + to_string(multiThread) + ".txt", std::ios::out}; 
+    for(auto [city, values] : shufflemap)
+    {
+        string str = city + " : " + to_string(values.size()) + " [ " ;
+        bool first = true;
+        for(auto v : values)
+        {
+            if(first)
+                str += to_string(v);
+            else
+            {
+                str += ", " + to_string(v);
+            }
+            first = false;
+
+        }
+        str += "]";
+        
+
+        fout << str << std::endl;
+    }
+    fout.close();
+
+    ofstream foutSum{"out-summary-" + to_string(multiThread) + ".txt", std::ios::out};
+    
+    foutSum << "------------------------------" << std::endl;
+    foutSum << "Number of cores: " << cpus << std::endl 
+    << "Multithread: "  <<  multiThread <<  std::endl 
+    << "Total Entries: "  <<  totalEntries <<  std::endl 
+    << "Mapper duration: "  <<  mapperDuration.count() / 1000  << " s"  <<  std::endl 
+    << "Shuffle duration: " << shuffleDuration.count() / 1000  << " s" <<  std::endl
+    << "Reduce duration: " << shuffleDuration.count() / 1000  << " s" <<  std::endl
+    << "Total duration: "  <<  totalDuration.count() / 1000  << " s" << std::endl;
+    foutSum << "------------------------------" << std::endl;
+
+    for(auto [city, values] : output)
+    {
+        foutSum <<  city + " : [ "  + to_string(std::get<0>(values)) + "," + to_string(std::get<1>(values)) + "," + to_string(std::get<2>(values)) + "]" << std::endl;
+    }
+    foutSum.close();
+}
+
+double s2d(const std::string& str) {
+    double result = 0.0;
+    int integerPart = 0;
+    double decimalPart = 0.0;
+    int decimalCount = 0;
+    bool isNegative = false;
+    bool inDecimal = false;
+
+    for (char c : str) {
+        if (c == '-') {
+            isNegative = true;
+        } else if (c == '.') {
+            inDecimal = true;
+        } else {
+            if (!inDecimal) {
+                integerPart = integerPart * 10 + (c - '0');
+            } else {
+                decimalPart = decimalPart * 10 + (c - '0');
+                decimalCount++;
+            }
+        }
+    }
+
+    result = integerPart + decimalPart / std::pow(10, decimalCount);
+
+    if (isNegative) {
+        result *= -1;
+    }
+
+    return result;
+}
+
 void shuffle(std::vector<std::pair<string, double>> *maps, std::map<string, std::vector<double>>& map, unsigned int cpus)
 {
     for(auto index = 0; index < cpus; index++)
@@ -88,9 +168,8 @@ void mapper(const char* buffer, std::vector<std::pair<string, double>>& map, uns
             size_t pos = line.find(';');
             try
             {
-                //la funcion stod es el problema
-                //string str = line.substr(0, pos) + " + " + line.substr(pos+1);
-                map.emplace_back(line.substr(0, pos), stod(line.substr(pos+1)));
+                // I have decided to implement my own s2d, std::stod() has poor performance in multithreading
+                map.emplace_back(line.substr(0, pos), s2d(line.substr(pos+1)));
             }
             catch(const std::exception& e)
             {
@@ -275,46 +354,7 @@ int main(int argc, char **argv) {
 
     std::cout << "Total duration: " << totalDuration.count() / 1000 << " s" << std::endl;
 
-    ofstream fout{"out-" + to_string(multiThread) + ".txt", std::ios::out}; 
-    for(auto [city, values] : shufflemap)
-    {
-        string str = city + " : " + to_string(values.size()) + " [ " ;
-        bool first = true;
-        for(auto v : values)
-        {
-            if(first)
-                str += to_string(v);
-            else
-            {
-                str += ", " + to_string(v);
-            }
-            first = false;
-
-        }
-        str += "]";
-        
-
-        fout << str << std::endl;
-    }
-    fout.close();
-
-    ofstream foutSum{"out-summary-" + to_string(multiThread) + ".txt", std::ios::out};
-    
-    foutSum << "------------------------------" << std::endl;
-    foutSum << "Number of cores: " << cpus << std::endl 
-    << "Multithread: "  <<  multiThread <<  std::endl 
-    << "Total Entries: "  <<  totalEntries <<  std::endl 
-    << "Mapper duration: "  <<  mapperDuration.count() / 1000  << " s"  <<  std::endl 
-    << "Shuffle duration: " << shuffleDuration.count() / 1000  << " s" <<  std::endl
-    << "Reduce duration: " << shuffleDuration.count() / 1000  << " s" <<  std::endl
-    << "Total duration: "  <<  totalDuration.count() / 1000  << " s" << std::endl;
-    foutSum << "------------------------------" << std::endl;
-
-    for(auto [city, values] : output)
-    {
-        foutSum <<  city + " : [ "  + to_string(std::get<0>(values)) + "," + to_string(std::get<1>(values)) + "," + to_string(std::get<2>(values)) + "]" << std::endl;
-    }
-    foutSum.close();
+    //writeOutput(shufflemap, output, multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, totalDuration);
 
     return 0;
 }
