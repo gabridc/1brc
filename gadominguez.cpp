@@ -15,6 +15,8 @@
 
 using namespace std;
 
+// Build command: g++ -O2 gadominguez.cpp -o gadominguez -std=c++23
+
 void writeOutput(std::map<string, std::vector<double>>& shufflemap, std::map<string, std::tuple<double, double, double>>& output, 
                 bool multiThread, const unsigned int cpus, const int totalEntries,
                 std::chrono::duration<float,std::milli> mapperDuration,
