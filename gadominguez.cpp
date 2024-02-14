@@ -11,6 +11,7 @@
 #include <queue>
 #include <map>
 #include <chrono>
+#include <ranges>
 
 using namespace std;
 
@@ -85,7 +86,7 @@ double s2d(const std::string& str) {
         }
     }
 
-    result = integerPart + decimalPart / std::pow(10, decimalCount);
+    result = integerPart + decimalPart / (10 ^ decimalCount);
 
     if (isNegative) {
         result *= -1;
@@ -185,18 +186,72 @@ void mapper(const char* buffer, std::vector<std::pair<string, double>>& map, uns
     //std::cout << "Pos Init: "<< initPos <<  " Last Pos: " << lastPos << std::endl;
 }
 
-void reduce2(std::vector<string>& keys, std::map<string, std::vector<double>>& map,  std::map<string, std::tuple<double, double, double>>& output, uint32_t start, uint32_t end)
+void reduceMinMax(std::vector<string>& keys, std::map<string, std::vector<double>>& map,  std::map<string, std::tuple<double, double, double>>& output, uint32_t start, uint32_t end)
+{
+    for(uint32_t index = start; index <= end; index++)
+    {
+        auto size = map[keys[index]].size();
+        if(size != 0)
+        {
+            auto min = *std::min_element(map[keys[index]].begin(), map[keys[index]].end());
+            auto max = *std::max_element(map[keys[index]].begin(), map[keys[index]].end());
+            double average = std::accumulate(map[keys[index]].begin(), map[keys[index]].end(), 0.0) / size;
+            output.emplace(keys[index], std::tuple(min, average, max));
+        }
+    }
+}
+
+void reduceFor(std::vector<string>& keys, std::map<string, std::vector<double>>& map,  std::map<string, std::tuple<double, double, double>>& output, uint32_t start, uint32_t end)
 {
     for(uint32_t index = start; index < end; index++)
     {
         auto size = map[keys[index]].size();
-        std::sort(map[keys[index]].begin(), map[keys[index]].end());
+        if(size != 0)
+        {
+            const std::vector<double> values = map[keys[index]];
+            double min, max, acc = 0.0;
+            for(int i = 0; i < size; i++)
+            {
+                if(i == 0)
+                {
+                    min = max = acc = values[i];
+                }
+                else
+                {
+                    min = (min > values[i]) ? values[i] : min;
+                    max = (max < values[i]) ? values[i] : max;
+                    acc += values[i];
+                }
 
-        double suma = std::accumulate(map[keys[index]].begin(), map[keys[index]].end(), 0.0);
-        double average = suma / size;
+            }
+            double average = acc / size;
+            output.emplace(keys[index], std::tuple(min, average, max));
+        }
 
-        output.emplace(keys[index], std::tuple(map[keys[index]][0], average, map[keys[index]][size - 1]));
     }
+}
+
+
+void reduceRanges(std::map<string, std::vector<double>>& map,  std::map<string, std::tuple<double, double, double>>& output, uint32_t start, uint32_t end)
+{
+    auto result1 = map
+        | std::views::values
+        | std::views::transform([](auto v)
+            {
+                auto min = std::ranges::min(v);
+                auto max = std::ranges::max(v);
+                auto avg = std::ranges::fold_left(v, 0, std::plus<double>()) / v.size();
+                return std::make_tuple(min, avg, max);
+            });
+
+    auto result2 = map
+        | std::views::keys;
+    
+    for(auto [city, values] : std::views::zip(result2, result1))
+    {
+        output.emplace(city, values);
+    }
+
 }
 
 int main(int argc, char **argv) {
@@ -311,7 +366,7 @@ int main(int argc, char **argv) {
 
             if (it == shufflemap.end())
             {
-                shufflemap.emplace(line.first, std::vector<double>{line.second}); 
+                shufflemap.emplace(line.first, std::vector<double>{line.second});
                 keys.emplace_back(line.first);
             }
             else
@@ -324,13 +379,16 @@ int main(int argc, char **argv) {
     std::chrono::duration<float,std::milli> shuffleDuration = endShuffle - startShuffle;
     std::cout << "Shuffle duration: " << shuffleDuration.count() / 1000 << " s" << std::endl;
 
-    //Reduce
+    ////////////////////////////////
+    
+    //  Reduce
+    
+    /////////////////////////////////
     auto reduceStart = std::chrono::system_clock::now();
     std::map<string, std::tuple<double, double, double>> output;
 
-
     if(!multiThread)
-        reduce2(ref(keys), ref(shufflemap), ref(output), 0, keys.size());
+        reduceMinMax(ref(keys), ref(shufflemap), ref(output), 0, keys.size());
     else
     {
         size = keys.size() / cpus;
@@ -338,7 +396,8 @@ int main(int argc, char **argv) {
         {
             unsigned long start = core * size;
             unsigned long end = (core == cpus - 1) ? end =  keys.size()  : (core + 1) *  size - 1;
-            threads.emplace_back(reduce2, ref(keys), ref(shufflemap), ref(output), start, end);
+            threads.emplace_back(reduceMinMax, ref(keys), ref(shufflemap), ref(output), start, end);
+            //threads.emplace_back(reduceFor, ref(keys), ref(shufflemap), ref(output), start, end);
         }
 
         for(auto& t : threads)
@@ -347,14 +406,39 @@ int main(int argc, char **argv) {
     
     auto reduceEnd = std::chrono::system_clock::now();
     std::chrono::duration<float,std::milli> reduceDuration = reduceEnd - reduceStart;
-    std::cout << "Reduce duration: " << reduceDuration.count() / 1000 << " s" << std::endl;
+    std::cout << "ReduceMinMax duration: " << reduceDuration.count() / 1000 << " s" << std::endl;
+        
+    ////////////////////////////////////////////////////
+    reduceStart = std::chrono::system_clock::now();
+    std::map<string, std::tuple<double, double, double>> output4;
 
+    if(!multiThread)
+        reduceFor(ref(keys), ref(shufflemap), ref(output4), 0, keys.size());  
+    
+    reduceEnd = std::chrono::system_clock::now();
+    reduceDuration = reduceEnd - reduceStart;
+    std::cout << "ReduceFor duration: " << reduceDuration.count() / 1000 << " s" << std::endl;    
+        
+        
+    ////////////////////////////////////////////////////    
+    reduceStart = std::chrono::system_clock::now();
+    std::map<string, std::tuple<double, double, double>> output3;
+
+    if(!multiThread)
+        reduceRanges(ref(shufflemap), ref(output3), 0, keys.size());
+    
+    reduceEnd = std::chrono::system_clock::now();
+    reduceDuration = reduceEnd - reduceStart;
+    std::cout << "ReduceRanges duration: " << reduceDuration.count() / 1000 << " s" << std::endl;
+
+    ///////////////////////////
+    
     auto end1 = std::chrono::system_clock::now();
     std::chrono::duration<float,std::milli> totalDuration = end1 - startTotal;
 
     std::cout << "Total duration: " << totalDuration.count() / 1000 << " s" << std::endl;
 
-    //writeOutput(shufflemap, output, multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, totalDuration);
+    writeOutput(shufflemap, output, multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, totalDuration);
 
     return 0;
 }

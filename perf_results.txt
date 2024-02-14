@@ -1,0 +1,40 @@
+-O2
+------------------------------
+Number of cores: 12
+Multithread: 0
+Total Entries: 50000000
+
+Mapper Duration: 5.56932 s
+Shuffle duration: 7.28085 s
+ReduceMinMax duration: 0.0956577 s
+ReduceFor duration: 0.0672337 s
+ReduceRanges duration: 0.113883 s
+Total duration: 15.4578 s
+------------------------------
+
+
+-O2
+------------------------------
+Number of cores: 12
+Multithread: 1
+Total Entries: 50000000
+
+Mapper Duration: 1.14214 s
+Shuffle duration: 7.1689 s
+ReduceMinMax duration: 0.0146361 s
+ReduceFor duration: 0.0400922 s
+Total duration: 10.6386 s
+------------------------------
+
+No -O2
+------------------------------
+Number of cores: 12
+Multithread: 1
+Total Entries: 50000000
+
+Mapper Duration: 7.73336 s
+Shuffle duration: 43.6153 s
+ReduceMinMax duration: 0.265386 s
+ReduceFor duration: 0.0964418 s
+Total duration: 62.6602 s
+------------------------------
