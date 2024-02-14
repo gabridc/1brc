@@ -1,4 +1,4 @@
--O2
+-O2 AMD Ryzen
 ------------------------------
 Number of cores: 12
 Multithread: 0
@@ -12,8 +12,21 @@ ReduceRanges duration: 0.113883 s
 Total duration: 15.4578 s
 ------------------------------
 
+-O2 Apple Silicon M2 Pro
+------------------------------
+Number of cores: 10 (6 + 4)
+Multithread: 0
+Total Entries: 50000000
 
--O2
+Mapper Duration: 3.47136 s
+Shuffle duration: 3.52217 s
+ReduceMinMax duration: 0.174096 s
+ReduceFor duration: 0.067092 s
+Total duration: 8.17767 s
+------------------------------
+
+
+-O2 AMD Ryzen
 ------------------------------
 Number of cores: 12
 Multithread: 1
@@ -26,7 +39,7 @@ ReduceFor duration: 0.0400922 s
 Total duration: 10.6386 s
 ------------------------------
 
-No -O2
+No -O2 AMD Ryzen
 ------------------------------
 Number of cores: 12
 Multithread: 1
@@ -37,4 +50,17 @@ Shuffle duration: 43.6153 s
 ReduceMinMax duration: 0.265386 s
 ReduceFor duration: 0.0964418 s
 Total duration: 62.6602 s
+------------------------------
+
+-O2 Apple Silicon M2 Pro
+------------------------------
+Number of cores: 10 (6 + 4)
+Multithread: 1
+Total Entries: 50000000
+
+Mapper Duration: 0.880383 s
+Shuffle duration: 3.5257 s
+ReduceMinMax duration: 0.026479 s
+ReduceFor duration: 0.014449 s
+Total duration: 5.03483 s
 ------------------------------
