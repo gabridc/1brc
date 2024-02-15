@@ -205,7 +205,7 @@ void reduceMinMax(std::vector<string>& keys, std::map<string, std::vector<double
 
 void reduceFor(std::vector<string>& keys, std::map<string, std::vector<double>>& map,  std::map<string, std::tuple<double, double, double>>& output, uint32_t start, uint32_t end)
 {
-    for(uint32_t index = start; index < end; index++)
+    for(uint32_t index = start; index <= end; index++)
     {
         auto size = map[keys[index]].size();
         if(size != 0)
@@ -231,29 +231,6 @@ void reduceFor(std::vector<string>& keys, std::map<string, std::vector<double>>&
         }
 
     }
-}
-
-
-void reduceRanges(std::map<string, std::vector<double>>& map,  std::map<string, std::tuple<double, double, double>>& output, uint32_t start, uint32_t end)
-{
-    auto result1 = map
-        | std::views::values
-        | std::views::transform([](auto v)
-            {
-                auto min = std::ranges::min(v);
-                auto max = std::ranges::max(v);
-                auto avg = std::ranges::fold_left(v, 0, std::plus<double>()) / v.size();
-                return std::make_tuple(min, avg, max);
-            });
-
-    auto result2 = map
-        | std::views::keys;
-    
-    for(auto [city, values] : std::views::zip(result2, result1))
-    {
-        output.emplace(city, values);
-    }
-
 }
 
 int main(int argc, char **argv) {
@@ -421,19 +398,6 @@ int main(int argc, char **argv) {
     reduceDuration = reduceEnd - reduceStart;
     std::cout << "ReduceFor duration: " << reduceDuration.count() / 1000 << " s" << std::endl;    
         
-        
-    ////////////////////////////////////////////////////    
-    reduceStart = std::chrono::system_clock::now();
-    std::map<string, std::tuple<double, double, double>> output3;
-
-    if(!multiThread)
-        reduceRanges(ref(shufflemap), ref(output3), 0, keys.size());
-    
-    reduceEnd = std::chrono::system_clock::now();
-    reduceDuration = reduceEnd - reduceStart;
-    std::cout << "ReduceRanges duration: " << reduceDuration.count() / 1000 << " s" << std::endl;
-
-    ///////////////////////////
     
     auto end1 = std::chrono::system_clock::now();
     std::chrono::duration<float,std::milli> totalDuration = end1 - startTotal;
