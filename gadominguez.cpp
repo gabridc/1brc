@@ -65,6 +65,31 @@ void writeOutput(std::map<string, std::vector<double>>& shufflemap, std::map<str
     foutSum.close();
 }
 
+#include <unistd.h>
+void writePreformance(bool multiThread, const unsigned int cpus, const int totalEntries,
+                std::chrono::duration<float,std::milli> mapperDuration,
+                std::chrono::duration<float,std::milli> shuffleDuration,
+                std::chrono::duration<float,std::milli> totalDuration)
+{
+     char hostname[256];
+    gethostname(hostname, sizeof(hostname));
+    ofstream foutSum{std::string(hostname) + "-summary" + to_string(multiThread) + ".txt", std::ios::out};
+    
+    foutSum << std::string(hostname) << std::endl;
+    foutSum << "------------------------------" << std::endl;
+    foutSum << "Number of cores: " << cpus << std::endl 
+    << "Multithread: "  <<  multiThread <<  std::endl 
+    << "Total Entries: "  <<  totalEntries <<  std::endl 
+    << "Mapper duration: "  <<  mapperDuration.count() / 1000  << " s"  <<  std::endl 
+    << "Shuffle duration: " << shuffleDuration.count() / 1000  << " s" <<  std::endl
+    << "Reduce duration: " << shuffleDuration.count() / 1000  << " s" <<  std::endl
+    << "Total duration: "  <<  totalDuration.count() / 1000  << " s" << std::endl;
+    foutSum << "------------------------------" << std::endl;
+
+    foutSum.close();
+}
+
+
 double s2d(const std::string& str) {
     double result = 0.0;
     int integerPart = 0;
@@ -95,18 +120,6 @@ double s2d(const std::string& str) {
     }
 
     return result;
-}
-
-void shuffle(std::vector<std::pair<string, double>> *maps, std::map<string, std::vector<double>>& map, unsigned int cpus)
-{
-    for(auto index = 0; index < cpus; index++)
-        for(auto line : maps[index])
-        {
-            if (map.find(line.first) != map.end())
-                map.at(line.first).push_back(line.second);
-            else
-                map.emplace(line.first, line.second); 
-        }
 }
 
 uint32_t findFirstCharLine(const char* buffer, unsigned long pos)
@@ -162,7 +175,6 @@ void mapper(const char* buffer, std::vector<std::pair<string, double>>& map, uns
     
     unsigned long lastPos = findLastCharLine(buffer, end);
 
-    auto start2 = std::chrono::system_clock::now();
     while (initPos <= lastPos)
     {   
         readLine(buffer, line, initPos, lastPos);
@@ -178,27 +190,6 @@ void mapper(const char* buffer, std::vector<std::pair<string, double>>& map, uns
             {
                 std::cerr << e.what() << " " <<line << '\n';
             }
-        }
-    }
-    auto end2 = std::chrono::system_clock::now();
-    std::chrono::duration<float,std::milli> duration = end2 - start2;
-    //std::cout << "Mapper duration: " << duration.count() / 1000 << std::endl;
-
-    //std::cout << "Thread ID: " << core << " ";
-    //std::cout << "Pos Init: "<< initPos <<  " Last Pos: " << lastPos << std::endl;
-}
-
-void reduceMinMax(std::vector<string>& keys, std::map<string, std::vector<double>>& map,  std::map<string, std::tuple<double, double, double>>& output, uint32_t start, uint32_t end)
-{
-    for(uint32_t index = start; index <= end; index++)
-    {
-        auto size = map[keys[index]].size();
-        if(size != 0)
-        {
-            auto min = *std::min_element(map[keys[index]].begin(), map[keys[index]].end());
-            auto max = *std::max_element(map[keys[index]].begin(), map[keys[index]].end());
-            double average = std::accumulate(map[keys[index]].begin(), map[keys[index]].end(), 0.0) / size;
-            output.emplace(keys[index], std::tuple(min, average, max));
         }
     }
 }
@@ -239,7 +230,6 @@ int main(int argc, char **argv) {
     std::vector<std::pair<string, double>> maps[cpus];
     std::queue<std::pair<string, double>> queue;
     std::vector<thread> threads;
-    threads.reserve(10);
     bool multiThread = false;
 
     if (argc > 2)
@@ -263,18 +253,20 @@ int main(int argc, char **argv) {
     }
 
     f.seekg(0);
-    // Read the content of the file into memory
+    // Copy file content in memory
     if (!f.read(buffer, size)) {
         std::cerr << "Failed to read file\n";
         delete[] buffer;
         return 1;
     }
 
-   //std::cout << file << " " << cpus << " " << size << " bytes" << std::endl;
+    ////////////////////////////////
+    
+    //  Mapper
+    
+    /////////////////////////////////
+
     auto chunkSize = size / cpus;
-
-    //std::cout << file << " " << cpus << " " << size << " bytes "  << chunkSize << " bytes"<< std::endl;
-
     auto start = std::chrono::system_clock::now();
     if(!multiThread)
         mapper(buffer, ref(maps[0]), 0, size, 0, size);
@@ -284,14 +276,10 @@ int main(int argc, char **argv) {
         {
             unsigned long start = core * chunkSize;
             unsigned long end = (core == cpus - 1) ? end = size : (core + 1) * chunkSize - 1;
-                
-
-        //std::cout << "thread " << (uint32_t) core << " Start: " << start << " End: " << end << std::endl;
-        threads.emplace_back(mapper, buffer, ref(maps[core]), start, end, core, size);
+            threads.emplace_back(mapper, buffer, ref(maps[core]), start, end, core, size);
         }
         auto end = std::chrono::system_clock::now();
         std::chrono::duration<float,std::milli> duration = end - start;
-        //std::cout << duration.count() / 1000 << " s" << std::endl;
 
         for(auto& t : threads)
             t.join();
@@ -302,58 +290,36 @@ int main(int argc, char **argv) {
     std::chrono::duration<float,std::milli> mapperDuration = mapperEnd - start;
     std::cout << "Mapper Duration: "<< mapperDuration.count() / 1000 << " s" << std::endl;
 
-    /*std::ofstream out{"out.txt", std::ios::out};
-    int res = 1;
-    for(auto map : maps)
-        for(auto line : map)
-        {
-            out << line.first << ";" << line.second << std::endl;
-            res++;
-        }
 
-    std::cout << "Total entries: " << res - 1 << std::endl;*/
-
-/*
-    auto chunks = 100000;
-    for(auto jobIndex = 0; jobIndex < cpus; jobIndex++)
-    {
-        //std::cout << jobIndex * chunks << " " << chunks << std::endl;
-        threads.push_back(thread(mapper, file, ref(maps[jobIndex]), jobIndex, chunks));
-    }
-        
-    for(auto& t : threads)
-        t.join();*/
-
-    int totalEntries = 0;
-    for(auto map : maps)
-        for(auto line : map)
-            totalEntries++;
-            //std::cout << line.first << " " << line.second << " " << res ++ << std::endl;
-
-    //std::cout << "Total entries: " << totalEntries << std::endl;
-
-
-    // suffle
+    ////////////////////////////////
+    
+    //  Shuffle
+    
+    /////////////////////////////////
     auto startShuffle = std::chrono::system_clock::now();
 
+    int totalEntries = 0;
     std::map<string, std::vector<double>> shufflemap;
     std::vector<string> keys;
-    for(auto map : maps)
-        for(auto line : map)
+    for(const auto& map : maps)
+        for(const auto& [city, tem] : map)
         {
-            auto it = shufflemap.find(line.first); 
+            totalEntries++;
+            auto it = shufflemap.find(city); 
 
             if (it == shufflemap.end())
             {
-                shufflemap.emplace(line.first, std::vector<double>{line.second});
-                keys.emplace_back(line.first);
+                shufflemap.emplace(city, std::vector<double>{tem});
+                keys.emplace_back(city);
             }
             else
             {
-                it->second.push_back(line.second);        
+                it->second.push_back(tem);        
             }   
         }
     
+    //std::cout << "Total entries: " << totalEntries << std::endl;
+
     auto endShuffle = std::chrono::system_clock::now();
     std::chrono::duration<float,std::milli> shuffleDuration = endShuffle - startShuffle;
     std::cout << "Shuffle duration: " << shuffleDuration.count() / 1000 << " s" << std::endl;
@@ -367,7 +333,7 @@ int main(int argc, char **argv) {
     std::map<string, std::tuple<double, double, double>> output;
 
     if(!multiThread)
-        reduceMinMax(ref(keys), ref(shufflemap), ref(output), 0, keys.size());
+        reduceFor(ref(keys), ref(shufflemap), ref(output), 0, keys.size());
     else
     {
         size = keys.size() / cpus;
@@ -375,8 +341,7 @@ int main(int argc, char **argv) {
         {
             unsigned long start = core * size;
             unsigned long end = (core == cpus - 1) ? end =  keys.size()  : (core + 1) *  size - 1;
-            threads.emplace_back(reduceMinMax, ref(keys), ref(shufflemap), ref(output), start, end);
-            //threads.emplace_back(reduceFor, ref(keys), ref(shufflemap), ref(output), start, end);
+            threads.emplace_back(reduceFor, ref(keys), ref(shufflemap), ref(output), start, end);
         }
 
         for(auto& t : threads)
@@ -385,26 +350,29 @@ int main(int argc, char **argv) {
     
     auto reduceEnd = std::chrono::system_clock::now();
     std::chrono::duration<float,std::milli> reduceDuration = reduceEnd - reduceStart;
-    std::cout << "ReduceMinMax duration: " << reduceDuration.count() / 1000 << " s" << std::endl;
-        
-    ////////////////////////////////////////////////////
-    reduceStart = std::chrono::system_clock::now();
-    std::map<string, std::tuple<double, double, double>> output4;
-
-    if(!multiThread)
-        reduceFor(ref(keys), ref(shufflemap), ref(output4), 0, keys.size());  
-    
-    reduceEnd = std::chrono::system_clock::now();
-    reduceDuration = reduceEnd - reduceStart;
-    std::cout << "ReduceFor duration: " << reduceDuration.count() / 1000 << " s" << std::endl;    
-        
+    std::cout << "Reduce duration: " << reduceDuration.count() / 1000 << " s" << std::endl;
     
     auto end1 = std::chrono::system_clock::now();
     std::chrono::duration<float,std::milli> totalDuration = end1 - startTotal;
 
     std::cout << "Total duration: " << totalDuration.count() / 1000 << " s" << std::endl;
 
-    writeOutput(shufflemap, output, multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, totalDuration);
+    writePreformance(multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, totalDuration);
 
     return 0;
 }
+
+/*void reduceMinMax(std::vector<string>& keys, std::map<string, std::vector<double>>& map,  std::map<string, std::tuple<double, double, double>>& output, uint32_t start, uint32_t end)
+{
+    for(uint32_t index = start; index <= end; index++)
+    {
+        auto size = map[keys[index]].size();
+        if(size != 0)
+        {
+            auto min = *std::min_element(map[keys[index]].begin(), map[keys[index]].end());
+            auto max = *std::max_element(map[keys[index]].begin(), map[keys[index]].end());
+            double average = std::accumulate(map[keys[index]].begin(), map[keys[index]].end(), 0.0) / size;
+            output.emplace(keys[index], std::tuple(min, average, max));
+        }
+    }
+}*/
