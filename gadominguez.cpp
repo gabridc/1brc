@@ -122,11 +122,10 @@ double s2d(const std::string& str) {
     return result;
 }
 
-uint32_t findFirstCharLine(const char* buffer, unsigned long pos)
+unsigned long long findFirstCharLine(const char* buffer, unsigned long long pos)
 {
     char character = '\0';
-    uint8_t index = 0U;
-    uint32_t p = pos;
+    unsigned long long p = pos;
     
     if((char) buffer[p] == '\n')
         p--;
@@ -136,11 +135,10 @@ uint32_t findFirstCharLine(const char* buffer, unsigned long pos)
     return p + 1;
 }
 
-uint32_t findLastCharLine(const char* buffer, unsigned long pos)
+unsigned long long findLastCharLine(const char* buffer, unsigned long long pos)
 {
     char character = '\0';
-    uint8_t index = 0U;
-    uint32_t p = pos;
+    unsigned long long p = pos;
     
     if((char) buffer[p] == '\n')
         p--;
@@ -194,9 +192,9 @@ void mapper(const char* buffer, std::vector<std::pair<string, double>>& map, uns
     }
 }
 
-void reduceFor(std::vector<string>& keys, std::map<string, std::vector<double>>& map,  std::map<string, std::tuple<double, double, double>>& output, uint32_t start, uint32_t end)
+void reduceFor(std::vector<string>& keys, std::map<string, std::vector<double>>& map,  std::map<string, std::tuple<double, double, double>>& output, unsigned long long start, unsigned long long end)
 {
-    for(uint32_t index = start; index <= end; index++)
+    for(unsigned long long index = start; index <= end; index++)
     {
         auto size = map[keys[index]].size();
         if(size != 0)
@@ -318,7 +316,7 @@ int main(int argc, char **argv) {
             }   
         }
     
-    //std::cout << "Total entries: " << totalEntries << std::endl;
+    //std::cout << "Total entries: " << totalEntries<< std::endl;
 
     auto endShuffle = std::chrono::system_clock::now();
     std::chrono::duration<float,std::milli> shuffleDuration = endShuffle - startShuffle;
@@ -362,9 +360,9 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-/*void reduceMinMax(std::vector<string>& keys, std::map<string, std::vector<double>>& map,  std::map<string, std::tuple<double, double, double>>& output, uint32_t start, uint32_t end)
+/*void reduceMinMax(std::vector<string>& keys, std::map<string, std::vector<double>>& map,  std::map<string, std::tuple<double, double, double>>& output, unsigned long long_t start, unsigned long long_t end)
 {
-    for(uint32_t index = start; index <= end; index++)
+    for(unsigned long long_t index = start; index <= end; index++)
     {
         auto size = map[keys[index]].size();
         if(size != 0)
