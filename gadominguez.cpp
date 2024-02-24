@@ -66,7 +66,7 @@ void writeOutput(std::map<string, std::vector<double>>& shufflemap, std::map<str
 }
 
 #include <unistd.h>
-void writePreformance(bool multiThread, const unsigned int cpus, const int totalEntries,
+void writePreformance(bool multiThread, const unsigned int cpus, const unsigned long long totalEntries,
                 std::chrono::duration<float,std::milli> mapperDuration,
                 std::chrono::duration<float,std::milli> shuffleDuration,
                 std::chrono::duration<float,std::milli> totalDuration)
@@ -298,7 +298,7 @@ int main(int argc, char **argv) {
     /////////////////////////////////
     auto startShuffle = std::chrono::system_clock::now();
 
-    int totalEntries = 0;
+    unsigned long long totalEntries = 0;
     std::map<string, std::vector<double>> shufflemap;
     std::vector<string> keys;
     for(const auto& map : maps)
