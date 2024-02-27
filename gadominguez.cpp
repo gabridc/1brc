@@ -161,7 +161,7 @@ void readLine(const char* buffer, string& line, unsigned long& initPos, unsigned
 
 }
 
-void mapper(const char* buffer, std::vector<std::pair<string, double>>& map, unsigned long start, unsigned long end, int core, unsigned long size)
+void mapper(const char* buffer, std::map<string, std::vector<double>>& map, unsigned long start, unsigned long end, int core, unsigned long size)
 {
     string line;
     char delim = '\n';
@@ -181,8 +181,19 @@ void mapper(const char* buffer, std::vector<std::pair<string, double>>& map, uns
             size_t pos = line.find(';');
             try
             {
-                // I have decided to implement my own s2d, std::stod() has poor performance in multithreading
-                map.emplace_back(line.substr(0, pos), s2d(line.substr(pos+1)));
+                const string& city = line.substr(0, pos);
+                auto it = map.find(city);
+
+                if (it == map.end())
+                {
+                    // I have decided to implement my own s2d, std::stod() has poor performance in multithreading
+                    map.emplace(city, std::vector<double>{s2d(line.substr(pos+1))});
+                }
+                else
+                {
+                    it->second.push_back(s2d(line.substr(pos+1)));        
+                }   
+
             }
             catch(const std::exception& e)
             {
@@ -203,7 +214,7 @@ void reduceFor(std::vector<string>& keys, std::map<string, std::vector<double>>&
             double min, max, acc = 0.0;
             for(int i = 0; i < size; i++)
             {
-                if(i == 0)
+               if(i == 0)
                 {
                     min = max = acc = values[i];
                 }
@@ -225,7 +236,7 @@ void reduceFor(std::vector<string>& keys, std::map<string, std::vector<double>>&
 int main(int argc, char **argv) {
     const unsigned int cpus = std::thread::hardware_concurrency();
     string file = "measurements.txt";
-    std::vector<std::pair<string, double>> maps[cpus];
+    std::map<string, std::vector<double>> maps[cpus];
     std::queue<std::pair<string, double>> queue;
     std::vector<thread> threads;
     bool multiThread = false;
@@ -288,7 +299,6 @@ int main(int argc, char **argv) {
     std::chrono::duration<float,std::milli> mapperDuration = mapperEnd - start;
     std::cout << "Mapper Duration: "<< mapperDuration.count() / 1000 << " s" << std::endl;
 
-
     ////////////////////////////////
     
     //  Shuffle
@@ -300,23 +310,25 @@ int main(int argc, char **argv) {
     std::map<string, std::vector<double>> shufflemap;
     std::vector<string> keys;
     for(const auto& map : maps)
-        for(const auto& [city, tem] : map)
+        for(const auto& [city, values] : map)
         {
-            totalEntries++;
-            auto it = shufflemap.find(city); 
-
-            if (it == shufflemap.end())
-            {
-                shufflemap.emplace(city, std::vector<double>{tem});
-                keys.emplace_back(city);
-            }
-            else
-            {
-                it->second.push_back(tem);        
-            }   
+                auto it = shufflemap.find(city);
+                totalEntries += values.size();                  
+                
+                if (it == shufflemap.end())
+                {
+                    // I have decided to implement my own s2d, std::stod() has poor performance in multithreading
+                    shufflemap.emplace(city, values);
+                    keys.push_back(city);
+                }
+                else
+                {
+                    shufflemap[city].insert(shufflemap[city].end(), values.begin(), values.end());   
+   
+                }  
         }
-    
-    //std::cout << "Total entries: " << totalEntries<< std::endl;
+
+    std::cout << "Total entries: " << totalEntries << std::endl;
 
     auto endShuffle = std::chrono::system_clock::now();
     std::chrono::duration<float,std::milli> shuffleDuration = endShuffle - startShuffle;
@@ -356,6 +368,7 @@ int main(int argc, char **argv) {
     std::cout << "Total duration: " << totalDuration.count() / 1000 << " s" << std::endl;
 
     writePreformance(multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, totalDuration);
+    writeOutput(shufflemap, output, multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, totalDuration);
 
     return 0;
 }
