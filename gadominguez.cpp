@@ -149,7 +149,7 @@ unsigned long long findLastCharLine(const char* buffer, unsigned long long pos)
     return p;
 }
 
-void readLine(const char* buffer, string& line, unsigned long& initPos, unsigned long& size)
+void readLine(const char* buffer, string& line, unsigned long long& initPos, unsigned long long& size)
 {
     line.clear();
     do
@@ -161,17 +161,17 @@ void readLine(const char* buffer, string& line, unsigned long& initPos, unsigned
 
 }
 
-void mapper(const char* buffer, std::map<string, std::vector<double>>& map, unsigned long start, unsigned long end, int core, unsigned long size)
+void mapper(const char* buffer, std::map<string, std::vector<double>>& map, unsigned long long start, unsigned long long end, int core, unsigned long long size)
 {
     string line;
     char delim = '\n';
     uint8_t index = 0;  
-    unsigned long initPos = 0;
+    unsigned long long initPos = 0;
 
     if(start !=0)
         initPos = findFirstCharLine(buffer, start);
     
-    unsigned long lastPos = findLastCharLine(buffer, end);
+    unsigned long long lastPos = findLastCharLine(buffer, end);
 
     while (initPos <= lastPos)
     {   
