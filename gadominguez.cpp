@@ -182,16 +182,17 @@ void mapper(const char* buffer, std::map<string, std::vector<double>>& map, unsi
             try
             {
                 const string& city = line.substr(0, pos);
+                const double& value = s2d(line.substr(pos+1));
                 auto it = map.find(city);
 
                 if (it == map.end())
                 {
                     // I have decided to implement my own s2d, std::stod() has poor performance in multithreading
-                    map.emplace(city, std::vector<double>{s2d(line.substr(pos+1))});
+                    map.emplace(city, std::vector<double>{value});
                 }
                 else
                 {
-                    it->second.push_back(s2d(line.substr(pos+1)));        
+                    it->second.push_back(value);        
                 }   
 
             }
