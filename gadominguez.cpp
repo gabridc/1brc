@@ -113,7 +113,7 @@ double s2d(const std::string& str) {
         }
     }
 
-    result = integerPart + decimalPart / (10 ^ decimalCount);
+    result = integerPart + decimalPart / pow(10, decimalCount);
 
     if (isNegative) {
         result *= -1;
