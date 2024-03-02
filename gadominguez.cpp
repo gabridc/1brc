@@ -13,6 +13,17 @@
 #include <chrono>
 #include <ranges>
 
+#include <fcntl.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 using namespace std;
 
 // Build command: g++ -O2 gadominguez.cpp -o gadominguez -std=c++23
@@ -248,26 +259,24 @@ int main(int argc, char **argv) {
         multiThread = (string(argv[2]) == "1") ? true : false;
     }
 
-    auto startTotal = std::chrono::system_clock::now();
-    ifstream f{file, std::ios::in | std::ios::ate};
+    auto startTotal= std::chrono::system_clock::now();
 
-    if(!f)
-        std::cout << "could not open file" << std::endl;
-
-    unsigned long size = f.tellg();
-
-    char* buffer = new char[size];
-    if (!buffer) {
-        std::cerr << "Memory allocation failed\n";
-        return 1;
+    int fd = open(file.c_str(), O_RDONLY);
+    if (!fd) {
+        perror("error opening file");
+        exit(EXIT_FAILURE);
     }
-
-    f.seekg(0);
-    // Copy file content in memory
-    if (!f.read(buffer, size)) {
-        std::cerr << "Failed to read file\n";
-        delete[] buffer;
-        return 1;
+    struct stat sb;
+    if (fstat(fd, &sb) == -1) {
+        perror("error getting file size");
+        exit(EXIT_FAILURE);
+    }
+  
+    size_t size = (size_t)sb.st_size;
+    const char *buffer = static_cast<const char*>(mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0));
+    if (buffer == MAP_FAILED) {
+        perror("error mmapping file");
+        exit(EXIT_FAILURE);
     }
 
     ////////////////////////////////
