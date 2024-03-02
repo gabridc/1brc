@@ -172,7 +172,171 @@ void readLine(const char* buffer, string& line, unsigned long long& initPos, uns
 
 }
 
-void mapper(const char* buffer, std::map<string, std::vector<double>>& map, unsigned long long start, unsigned long long end, int core, unsigned long long size)
+#define MAX_DISTINCT_GROUPS 10000
+#define MAX_GROUPBY_KEY_LENGTH 100
+#define HCAP (1 << 14)
+
+struct Group {
+  unsigned int count;
+  long sum;
+  int min;
+  int max;
+  char key[MAX_GROUPBY_KEY_LENGTH];
+};
+
+struct Result {
+  unsigned int map[HCAP];
+  unsigned int hashes[HCAP];
+  unsigned int n;
+  struct Group groups[MAX_DISTINCT_GROUPS];
+};
+
+struct Chunk {
+  size_t start;
+  size_t end;
+  const char *data;
+};
+
+static inline const char *parse_number(int *dest, const char *s) {
+  // parse sign
+  int mod;
+  if (*s == '-') {
+    mod = -1;
+    s++;
+  } else {
+    mod = 1;
+  }
+
+  if (s[1] == '.') {
+    *dest = ((s[0] * 10) + s[2] - ('0' * 11)) * mod;
+    return s + 4;
+  }
+
+  *dest = (s[0] * 100 + s[1] * 10 + s[3] - ('0' * 111)) * mod;
+  return s + 5;
+}
+
+static void *process_chunk(void *ptr) {
+  struct Chunk *ch = (struct Chunk *)ptr;
+
+  // skip start forward until SOF or after next newline
+  if (ch->start > 0) {
+    while (ch->data[ch->start - 1] != '\n') {
+      ch->start++;
+    }
+  }
+
+  while (ch->data[ch->end] != 0x0 && ch->data[ch->end - 1] != '\n') {
+    ch->end++;
+  }
+
+  struct Result *result = static_cast<Result*>(malloc(sizeof(*result)));
+  if (!result) {
+    perror("malloc error");
+    exit(EXIT_FAILURE);
+  }
+  result->n = 0;
+
+  memset(result->hashes, 0, HCAP * sizeof(int));
+  memset(result->map, 0, HCAP * sizeof(int));
+
+  const char *s = &ch->data[ch->start];
+  const char *end = &ch->data[ch->end];
+  const char *linestart;
+  unsigned int h;
+  int temperature;
+  int len;
+  unsigned int c;
+
+  while (s != end) {
+    linestart = s;
+
+    // hash everything up to ';'
+    // assumption: key is at least 1 char
+    len = 1;
+    h = (unsigned char)s[0];
+    while (s[len] != ';') {
+      h = (h * 31) + (unsigned char)s[len++];
+    }
+
+    // parse decimal number as int
+    s = parse_number(&temperature, s + len + 1);
+
+    // probe map until free spot or match
+    while (result->hashes[h & (HCAP - 1)] != 0 &&
+           h != result->hashes[h & (HCAP - 1)]) {
+      h++;
+    }
+    auto k =  h & (HCAP - 1);
+    c = result->map[h & (HCAP - 1)];
+
+    if (c == 0) {
+      memcpy(result->groups[result->n].key, linestart, (size_t)len);
+      result->groups[result->n].key[len] = 0x0;
+      result->groups[result->n].count = 1;
+      result->groups[result->n].sum = temperature;
+      result->groups[result->n].min = temperature;
+      result->groups[result->n].max = temperature;
+      result->map[h & (HCAP - 1)] = result->n++;
+      result->hashes[h & (HCAP - 1)] = h;
+    } else {
+      result->groups[c].count += 1;
+      result->groups[c].sum += temperature;
+      if (temperature < result->groups[c].min) {
+        result->groups[c].min = temperature;
+      } else if (temperature > result->groups[c].max) {
+        result->groups[c].max = temperature;
+      }
+    }
+  }
+
+  return (void *)result;
+}
+
+void mapper2(const char* buffer, std::map<string, std::vector<double>>& map, unsigned long long start, unsigned long long end, int core, unsigned long long size)
+{
+    string line;
+    char delim = '\n';
+    uint8_t index = 0;  
+    unsigned long long initPos = 0;
+
+    if(start !=0)
+        initPos = findFirstCharLine(buffer, start);
+    
+    unsigned long long lastPos = findLastCharLine(buffer, end);
+
+    while (initPos <= lastPos)
+    {   
+        readLine(buffer, line, initPos, lastPos);
+        if(line.size() > 1)
+        {
+            size_t pos = line.find(';');
+            try
+            {
+                const string& city = line.substr(0, pos);
+                const double& value = s2d(line.substr(pos+1));
+                auto it = map.find(city);
+
+                if (it == map.end())
+                {
+                    // I have decided to implement my own s2d, std::stod() has poor performance in multithreading
+                    map.emplace(city, std::vector<double>{value});
+                }
+                else
+                {
+                    it->second.push_back(value);        
+                }   
+
+            }
+            catch(const std::exception& e)
+            {
+                std::cerr << e.what() << " " <<line << '\n';
+            }
+        }
+    }
+}
+
+void mapper(const char* buffer, std::unordered_map<string, std::vector<double>>& map, unsigned long long start, unsigned long long end, int core, unsigned long long size)
 {
     string line;
     char delim = '\n';
@@ -248,7 +412,8 @@ void reduceFor(std::vector<string>& keys, std::map<string, std::vector<double>>&
 int main(int argc, char **argv) {
     const unsigned int cpus = std::thread::hardware_concurrency();
     string file = "measurements.txt";
-    std::map<string, std::vector<double>> maps[cpus];
+    std::unordered_map<string, std::vector<double>> maps[cpus];
+    std::map<string, std::vector<double>> maps2[cpus];
     std::queue<std::pair<string, double>> queue;
     std::vector<thread> threads;
     bool multiThread = false;
@@ -287,8 +452,41 @@ int main(int argc, char **argv) {
 
     auto chunkSize = size / cpus;
     auto start = std::chrono::system_clock::now();
+    struct Chunk chunks[1];
+    chunks->data = buffer;
+    chunks->start = 0;
+    chunks->end = size;
     if(!multiThread)
+    {
+        /*auto start1 = std::chrono::system_clock::now();
+
+        process_chunk(chunks);
+
+        auto end1 = std::chrono::system_clock::now();
+        std::chrono::duration<float,std::milli> duration1 = end1 - start1;
+        std::cout << "Process chunk Duration: "<< duration1.count() << " ms" << std::endl;*/
+
+
+        //auto start2 = std::chrono::system_clock::now();
+
+        // TODO: Hablar sobre por que el uso de unordered_map es más rapido.
+        // Ref: https://julien.jorge.st/posts/en/effortless-performance-improvements-in-cpp-std-unordered_map/
         mapper(buffer, ref(maps[0]), 0, size, 0, size);
+        /*
+        auto end2 = std::chrono::system_clock::now();
+        std::chrono::duration<float,std::milli> duration2 = end2 - start2;
+        std::cout << "Mapper std::unordered_map Duration: "<< duration2.count() << " ms" << std::endl;
+        */
+    
+        /*auto start3 = std::chrono::system_clock::now();
+
+        mapper2(buffer, ref(maps2[0]), 0, size, 0, size);
+
+        auto end3 = std::chrono::system_clock::now();
+        std::chrono::duration<float,std::milli> duration3 = end3 - start3;
+        std::cout << "Mapper std::map Duration: "<< duration3.count() << " ms" << std::endl;*/
+    }
+
     else
     {
         for(uint8_t core = 0; core < cpus; core++)
@@ -308,7 +506,6 @@ int main(int argc, char **argv) {
     auto mapperEnd = std::chrono::system_clock::now();
     std::chrono::duration<float,std::milli> mapperDuration = mapperEnd - start;
     std::cout << "Mapper Duration: "<< mapperDuration.count() / 1000 << " s" << std::endl;
-
     ////////////////////////////////
     
     //  Shuffle
