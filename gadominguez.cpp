@@ -575,7 +575,7 @@ int main(int argc, char **argv) {
     std::cout << "Total duration: " << totalDuration.count() / 1000 << " s" << std::endl;
 
     writePreformance(multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, totalDuration);
-    writeOutput(shufflemap, output, multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, totalDuration);
+    //writeOutput(shufflemap, output, multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, totalDuration);
 
     return 0;
 }
