@@ -80,6 +80,7 @@ void writeOutput(std::map<string, std::vector<double>>& shufflemap, std::map<str
 void writePreformance(bool multiThread, const unsigned int cpus, const unsigned long long totalEntries,
                 std::chrono::duration<float,std::milli> mapperDuration,
                 std::chrono::duration<float,std::milli> shuffleDuration,
+                std::chrono::duration<float,std::milli> reduceDuration,
                 std::chrono::duration<float,std::milli> totalDuration)
 {
      char hostname[256];
@@ -93,7 +94,7 @@ void writePreformance(bool multiThread, const unsigned int cpus, const unsigned 
     << "Total Entries: "  <<  totalEntries <<  std::endl 
     << "Mapper duration: "  <<  mapperDuration.count() / 1000  << " s"  <<  std::endl 
     << "Shuffle duration: " << shuffleDuration.count() / 1000  << " s" <<  std::endl
-    << "Reduce duration: " << shuffleDuration.count() / 1000  << " s" <<  std::endl
+    << "Reduce duration: " << reduceDuration.count() / 1000  << " s" <<  std::endl
     << "Total duration: "  <<  totalDuration.count() / 1000  << " s" << std::endl;
     foutSum << "------------------------------" << std::endl;
 
@@ -574,7 +575,7 @@ int main(int argc, char **argv) {
 
     std::cout << "Total duration: " << totalDuration.count() / 1000 << " s" << std::endl;
 
-    writePreformance(multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, totalDuration);
+    writePreformance(multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, reduceDuration, totalDuration);
     //writeOutput(shufflemap, output, multiThread, cpus, totalEntries, mapperDuration, shuffleDuration, totalDuration);
 
     return 0;
